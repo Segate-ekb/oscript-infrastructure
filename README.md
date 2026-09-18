@@ -29,3 +29,31 @@
    * Публикация в основном канале хаба, если это ветка master.
   
 Этот документ можно обсуждать и предлагать к нему правки.
+
+## OpenHub — hub-new.oscript.io
+
+Новый хаб пакетов ([OpenHub](https://github.com/Segate-ekb/openhub)) живёт в том же `docker-compose.yml`:
+
+| Сервис | Что это |
+| --- | --- |
+| `openhub` | сам хаб, образ `segateekb/openhub`; |
+| `openhub_db` | PostgreSQL хаба;|
+| `otel-collector`, `tempo`, `loki`, `prometheus`, `grafana` | мониторинг хаба, конфигурация в `monitoring/` |
+
+Файлы пакетов хаб хранит в общем MinIO
+
+### Первый запуск на работающем сервере
+
+1. Добавить в `.env` переменные из [`openhub.env.example`](openhub.env.example).
+2. Завести DNS-записи `hub-new.oscript.io` и `grafana.oscript.io` на сервер.
+3. Выпустить сертификаты и пересобрать nginx с новыми сайтами:
+
+   ```bash
+   ./add-letsencrypt-domain.sh hub-new.oscript.io
+   ./add-letsencrypt-domain.sh grafana.oscript.io
+   ```
+4. Завести в MinIO бакет `openhub` и учётку хаба с ключами `OPENHUB_S3_ACCESS_KEY` /
+   `OPENHUB_S3_SECRET_KEY` из `.env` — руками, один раз.
+5. Поднять хаб — база и мониторинг поднимутся сами:
+
+6. Сразу открыть <https://hub-new.oscript.io/setup> и завести первого администратора.

@@ -109,8 +109,144 @@ services:
     volumes:
       - minio_data:/data
 
+  # OpenHub — hub-new.oscript.io. Секреты — в .env, см. openhub.env.example
+  openhub:
+    image: segateekb/openhub:0.7.23
+    restart: unless-stopped
+    environment:
+      - TZ=UTC
+      - OSHUB_INSTANCE_URL=https://hub-new.oscript.io
+      - OSHUB_INSTANCE_TRUSTED_PROXIES=10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16
+      - data_ИсточникиДанных_ТипКоннектора=КоннекторPostgreSQL
+      - data_ИсточникиДанных_СтрокаСоединения=Host=openhub_db;Username=openhub;Password=${OPENHUB_DB_PASSWORD};Database=openhub
+      - OSHUB_STORAGE_BACKEND=s3
+      - OSHUB_STORAGE_S3_ENDPOINT=http://minio:9000
+      - OSHUB_STORAGE_S3_BUCKET=openhub
+      - OSHUB_STORAGE_S3_REGION=us-east-1
+      - OSHUB_STORAGE_S3_FORCE__PATH__STYLE=true
+      - OSHUB_STORAGE_S3_ACCESS_KEY=${OPENHUB_S3_ACCESS_KEY}
+      - OSHUB_STORAGE_S3_SECRET_KEY=${OPENHUB_S3_SECRET_KEY}
+      - Kestrel__Limits__MaxRequestBodySize=134217728
+      - OSHUB_PUBLISH_MAX__UPLOAD__BYTES=134217728
+      - OSHUB_PUBLISH_MAX__UNPACKED__BYTES=268435456
+      - OSHUB_PUBLISH_MAX__FILES=20000
+      - OTEL_ENABLED=true
+      - OTEL_SERVICE_NAME=openhub
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+      - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+      - OTEL_ENTITY_QUERY_TEXT=true
+    volumes:
+      - openhub_data:/var/lib/openhub
+    depends_on:
+      - openhub_db
+      - minio
+      - otel-collector
+    networks:
+      - default
+      - openhub
+      - monitoring
+
+  openhub_db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=openhub
+      - POSTGRES_DB=openhub
+      - POSTGRES_PASSWORD=${OPENHUB_DB_PASSWORD}
+    volumes:
+      - openhub_postgres_data:/var/lib/postgresql/data
+    networks:
+      - openhub
+
+  # Мониторинг OpenHub. Наружу смотрит только Grafana: grafana.oscript.io
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.115.1
+    command: ["--config=/etc/otelcol/config.yaml"]
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/otel-collector.yaml:/etc/otelcol/config.yaml:ro
+    depends_on:
+      - tempo
+      - loki
+      - prometheus
+    networks:
+      - monitoring
+
+  tempo:
+    image: grafana/tempo:2.7.2
+    command: ["-config.file=/etc/tempo/tempo.yaml"]
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempo_data:/var/tempo
+    networks:
+      - monitoring
+
+  loki:
+    image: grafana/loki:3.4.6
+    command: ["-config.file=/etc/loki/loki.yaml"]
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/loki.yaml:/etc/loki/loki.yaml:ro
+      - loki_data:/loki
+    networks:
+      - monitoring
+
+  prometheus:
+    image: prom/prometheus:v3.5.5
+    command:
+      - --config.file=/etc/prometheus/prometheus.yaml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      - --web.enable-remote-write-receiver
+      - --enable-feature=exemplar-storage
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/prometheus.yaml:/etc/prometheus/prometheus.yaml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - monitoring
+
+  grafana:
+    image: grafana/grafana:11.6.16
+    restart: unless-stopped
+    environment:
+      - GF_SERVER_ROOT_URL=https://grafana.oscript.io
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?задайте GRAFANA_ADMIN_PASSWORD в .env}
+      - GF_SECURITY_COOKIE_SECURE=true
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_USERS_DEFAULT_THEME=dark
+      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/var/lib/grafana/dashboards/openhub.json
+      - GF_ANALYTICS_REPORTING_ENABLED=false
+      - GF_ANALYTICS_CHECK_FOR_UPDATES=false
+      - GF_NEWS_NEWS_FEED_ENABLED=false
+    volumes:
+      - ./monitoring/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./monitoring/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+      - tempo
+      - loki
+    networks:
+      - default
+      - monitoring
+
+networks:
+  openhub:
+  monitoring:
+
 volumes:
   web_content:
   jenkins_home:
   postgres_data:
   minio_data:
+  openhub_data:
+  openhub_postgres_data:
+  tempo_data:
+  loki_data:
+  prometheus_data:
+  grafana_data:
