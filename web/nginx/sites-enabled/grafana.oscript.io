@@ -37,7 +37,7 @@ server {
     resolver 127.0.0.11 valid=30s;
 
     location / {
-        set $target_url http://grafana:3000;
+        set $target_url http://lgtm:3000;
         proxy_pass $target_url;
 
         proxy_http_version 1.1;

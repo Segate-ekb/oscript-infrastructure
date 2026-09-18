@@ -38,7 +38,7 @@
 | --- | --- |
 | `openhub` | сам хаб, образ `segateekb/openhub`; |
 | `openhub_db` | PostgreSQL хаба;|
-| `otel-collector`, `tempo`, `loki`, `prometheus`, `grafana` | мониторинг хаба, конфигурация в `monitoring/` |
+| `lgtm` | мониторинг хаба одним контейнером (`grafana/otel-lgtm`), Grafana — grafana.oscript.io; дашборд хаба — в `monitoring/` |
 
 Файлы пакетов хаб хранит в общем MinIO
 
