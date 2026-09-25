@@ -735,7 +735,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "db_client_connection_count{service_name=\"$service\"}",
+          "expr": "max by (db_client_connection_pool_name, db_client_connection_state) (db_client_connection_count{service_name=\"$service\"})",
           "legendFormat": "{{db_client_connection_state}}",
           "range": true
         },
@@ -746,7 +746,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "db_client_connection_max{service_name=\"$service\"}",
+          "expr": "max by (db_client_connection_pool_name) (db_client_connection_max{service_name=\"$service\"})",
           "legendFormat": "предел",
           "range": true
         },
@@ -757,7 +757,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "db_client_connection_pending_requests{service_name=\"$service\"}",
+          "expr": "max by (db_client_connection_pool_name) (db_client_connection_pending_requests{service_name=\"$service\"})",
           "legendFormat": "ожидают",
           "range": true
         }
