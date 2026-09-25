@@ -18,6 +18,7 @@ cd "$(dirname "$0")/.."
 apply=false
 pool=""
 touch_changed=false
+opm_db=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -31,6 +32,14 @@ while [ $# -gt 0 ]; do
       shift
       ;;
     --touch-changed) touch_changed=true ;;
+    --opm-db)
+      if [ $# -lt 2 ]; then
+        echo "--opm-db требует значение: имя базы старого хаба" >&2
+        exit 1
+      fi
+      opm_db="$2"
+      shift
+      ;;
     -h|--help)
       sed -n '3,12p' "$0" | sed 's/^# \{0,1\}//'
       exit 0
@@ -56,14 +65,26 @@ for service in opm_hub_db openhub_db; do
   fi
 done
 
+# Имя базы старого хаба берём из строки соединения самого хаба: у сервера базы
+# POSTGRES_DB может быть не задан, а хаб ходит в свою. Пароль отсюда не читается.
+if [ -z "$opm_db" ] && [ -n "$($compose ps -q opm_hub)" ]; then
+  opm_db=$($compose exec -T opm_hub \
+             sh -c 'printf "%s" "${OSWEB_Database__ConnectionString:-}"' \
+           | tr ';' '\n' \
+           | sed -n 's/^[[:space:]]*[Dd]atabase[[:space:]]*=[[:space:]]*//p' \
+           | head -1 | tr -d '\r')
+fi
+
 # Логин и пароль берём из окружения самих контейнеров — их туда положил compose,
 # разобрав .env своим парсером. Читать .env шеллом нельзя: пароль с пробелом,
 # решёткой или $( ) шелл выполнит, а не подставит. Заодно пароль не светится
 # в списке процессов хоста: в argv докера его нет.
 opm_psql() {
   $compose exec -T opm_hub_db sh -c \
-    'PGPASSWORD="$POSTGRES_PASSWORD" exec psql -v ON_ERROR_STOP=1 \
-       -U "$POSTGRES_USER" -d "${POSTGRES_DB:-$POSTGRES_USER}" "$@"' psql "$@"
+    'db="$1"; shift
+     if [ -z "$db" ]; then db="${POSTGRES_DB:-$POSTGRES_USER}"; fi
+     PGPASSWORD="$POSTGRES_PASSWORD" exec psql -v ON_ERROR_STOP=1 \
+       -U "$POSTGRES_USER" -d "$db" "$@"' psql "$opm_db" "$@"
 }
 
 hub_psql() {
