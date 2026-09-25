@@ -40,20 +40,6 @@ while [ $# -gt 0 ]; do
   shift
 done
 
-if [ -f .env ]; then
-  set -a
-  # shellcheck disable=SC1091
-  . ./.env
-  set +a
-fi
-
-for var in POSTGRES_USER POSTGRES_PASSWORD OPENHUB_DB_PASSWORD; do
-  if [ -z "${!var:-}" ]; then
-    echo "Не задана переменная $var (ожидается в .env в корне репозитория)" >&2
-    exit 1
-  fi
-done
-
 if docker compose version >/dev/null 2>&1; then
   compose="docker compose"
 elif command -v docker-compose >/dev/null 2>&1; then
@@ -63,16 +49,27 @@ else
   exit 1
 fi
 
-opm_db="${POSTGRES_DB:-$POSTGRES_USER}"
+for service in opm_hub_db openhub_db; do
+  if [ -z "$($compose ps -q "$service")" ]; then
+    echo "Сервис $service не поднят: сначала docker-compose up -d $service" >&2
+    exit 1
+  fi
+done
 
+# Логин и пароль берём из окружения самих контейнеров — их туда положил compose,
+# разобрав .env своим парсером. Читать .env шеллом нельзя: пароль с пробелом,
+# решёткой или $( ) шелл выполнит, а не подставит. Заодно пароль не светится
+# в списке процессов хоста: в argv докера его нет.
 opm_psql() {
-  $compose exec -T -e PGPASSWORD="$POSTGRES_PASSWORD" opm_hub_db \
-    psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$opm_db" "$@"
+  $compose exec -T opm_hub_db sh -c \
+    'PGPASSWORD="$POSTGRES_PASSWORD" exec psql -v ON_ERROR_STOP=1 \
+       -U "$POSTGRES_USER" -d "${POSTGRES_DB:-$POSTGRES_USER}" "$@"' psql "$@"
 }
 
 hub_psql() {
-  $compose exec -T -e PGPASSWORD="$OPENHUB_DB_PASSWORD" openhub_db \
-    psql -v ON_ERROR_STOP=1 -U openhub -d openhub "$@"
+  $compose exec -T openhub_db sh -c \
+    'PGPASSWORD="$POSTGRES_PASSWORD" exec psql -v ON_ERROR_STOP=1 \
+       -U "$POSTGRES_USER" -d "${POSTGRES_DB:-$POSTGRES_USER}" "$@"' psql "$@"
 }
 
 csv="openhub-migration/opm-dump-$(date '+%Y%m%d-%H%M%S').csv"
